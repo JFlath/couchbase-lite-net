@@ -159,4 +159,5 @@ UnityDemo.sln
 tmp/
 sync_gateway
 staging
-libTokenizer.dylib
+libTokenizer.*
+Tokenizer.dll
