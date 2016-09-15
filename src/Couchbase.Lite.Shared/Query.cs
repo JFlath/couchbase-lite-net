@@ -166,6 +166,38 @@ namespace Couchbase.Lite {
         #region Properties
 
         /// <summary>
+        /// Query string for a full-text search; works only if the view's map function has triggered full-
+        /// text indexing by emitting strings wrapped by TextKey.
+        /// The query rows produced by this search will be instances of FullTextQueryRow.
+        /// 
+        /// The query string will be broken up into words. "Noise" words like "the" and "hello" (also
+        /// called "stop-words") are ignored.
+        /// 
+        /// The result will include a row corresponding to every emitted CBLTextKey() that contains _any_
+        /// of the words in the query. Word matching tries to account for (English) grammatical variations
+        /// like plurals and verb tenses, so for example "cat" will match "cats" and "type" will match
+        /// "typing".
+        /// 
+        /// **NOTE:** Full-text views have no keys, so the key-related query properties will be ignored.
+        /// They also can't be reduced or grouped, so those properties are ignored too.
+        /// </summary>
+        public string FullTextQuery { get; set; }
+
+        /// <summary>
+        /// If set to true, the query will collect snippets of the text surrounding each match, available
+        /// via the FullTextQueryRow's GetSnippet() method.
+        /// </summary>
+        public bool FullTextSnippets { get; set; }
+
+        /// <summary>
+        /// If true (the default) the full-text query result rows will be sorted by (approximate) relevance.
+        /// If set to false, the rows will be returned in the order the documents were added to the database,
+        /// i.e.essentially unordered; this is somewhat faster, so it can be useful if you don't care
+        /// about the ordering of the rows.
+        /// </summary>
+        public bool FullTextRanking { get; set; }
+
+        /// <summary>
         /// Gets the <see cref="Couchbase.Lite.Database"/> that owns 
         /// the <see cref="Couchbase.Lite.Query"/>'s <see cref="Couchbase.Lite.View"/>.
         /// </summary>
@@ -353,6 +385,9 @@ namespace Couchbase.Lite {
                 queryOptions.AllDocsMode = AllDocsMode;
                 queryOptions.StartKeyDocId = StartKeyDocId;
                 queryOptions.EndKeyDocId = EndKeyDocId;
+                queryOptions.FullTextQuery = FullTextQuery;
+                queryOptions.FullTextSnippets = FullTextSnippets;
+                queryOptions.FullTextRanking = FullTextRanking;
                 var postFilter = PostFilter;
                 if (postFilter != null) {
                     var database = Database;
@@ -382,11 +417,10 @@ namespace Couchbase.Lite {
             _eventContext = database.Manager.CapturedContext;
             View = view;
             Limit = Int32.MaxValue;
-            MapOnly = (view != null && view.Reduce == null);
+            MapOnly = view?.Reduce == null;
             InclusiveEnd = true;
             InclusiveStart = true;
-            IndexUpdateMode = IndexUpdateMode.Before;
-            AllDocsMode = AllDocsMode.AllDocs;
+            FullTextRanking = true;
         }
 
         /// <summary>Constructor</summary>

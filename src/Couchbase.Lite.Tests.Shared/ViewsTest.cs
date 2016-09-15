@@ -57,6 +57,7 @@ using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using Couchbase.Lite.Revisions;
 using Couchbase.Lite.Storage.SQLCipher;
+using FluentAssertions;
 
 namespace Couchbase.Lite
 {
@@ -69,6 +70,92 @@ namespace Couchbase.Lite
         private LiveQuery query;
 
         public ViewsTest(string storageType) : base(storageType) {}
+
+        [Test]
+        public void TestFullTextQuery()
+        {
+            var docs = new List<RevisionInternal>();
+            docs.Add(PutDoc(database, new Dictionary<string, object> {
+                ["_id"] = "22222",
+                ["text"] = "it was a dark"
+            }));
+            docs.Add(PutDoc(database, new Dictionary<string, object> {
+                ["_id"] = "44444",
+                ["text"] = "and STöRMy night."
+            }));
+            docs.Add(PutDoc(database, new Dictionary<string, object> {
+                ["_id"] = "11111",
+                ["text"] = "outside somewhere"
+            }));
+            docs.Add(PutDoc(database, new Dictionary<string, object> {
+                ["_id"] = "33333",
+                ["text"] = "a dog whøse ñame was “Dog”"
+            }));
+            docs.Add(PutDoc(database, new Dictionary<string, object> {
+                ["_id"] = "55555",
+                ["text"] = "was barking."
+            }));
+
+            var view = database.GetView("fts");
+            view.SetMap((doc, emit) => {
+                if(doc.ContainsKey("text")) {
+                    emit(SpecialKeyFactory.TextKey(doc["text"] as string), doc["_id"]);
+                }
+            }, "1");
+
+            view.UpdateIndex_Internal().Code.Should().Be(StatusCode.Ok, "because the view's index update should succeed");
+
+            // Create another view that outputs similar-but-different text, to make sure the results
+            // don't get mixed up
+            var otherView = database.GetView("fts_other");
+            otherView.SetMap((doc, emit) => {
+                if(doc.ContainsKey("text")) {
+                    emit(SpecialKeyFactory.TextKey("dog stormy"), doc["_id"]);
+                }
+            }, "1");
+
+            otherView.UpdateIndex_Internal().Code.Should().Be(StatusCode.Ok, "because the view's index update should succeed");
+
+            // Query the full-text index:
+            var query = view.CreateQuery();
+            query.FullTextQuery = "dog name";
+            var rows = query.Run().ToArray();
+            rows.Length.Should().Be(1, "because only one document should match 'dog name'");
+            rows[0].Should().Match<FullTextQueryRow>(row =>
+                 row.DocumentId == "33333" &&
+                          row.FullText == "a dog whøse ñame was “Dog”"
+                          && row.Value as string == "33333"
+                          && row.MatchCount >= 2
+            , "because the information on the document should match the original");
+
+            (rows[0] as FullTextQueryRow).GetTextRange(0).Should().Be(new Range(2, 3));
+            (rows[0] as FullTextQueryRow).GetTextRange(1).Should().Be(new Range(12, 4));
+            (rows[0] as FullTextQueryRow).GetTextRange(2).Should().Be(new Range(22, 3));
+
+            // Now delete a document:
+            var rev = docs[3];
+            var del = new RevisionInternal(rev.DocID, rev.RevID, true);
+            database.PutRevision(del, rev.RevID, false);
+
+            // Make sure the deleted doc doesn't still show up in the query results:
+            view.UpdateIndex_Internal().Code.Should().Be(StatusCode.Ok, "because the view's index update should succeed");
+            rows = query.Run().ToArray();
+            rows.Length.Should().Be(0, "because the deleted document should not show up in the results");
+
+            // Make sure an empty FTS query returns an empty result set: (#840)
+            query = view.CreateQuery();
+            query.FullTextQuery = "";
+            rows = query.Run().ToArray();
+            rows.Should().BeEmpty("because an empty query should have no results");
+
+            // Make sure SQLite rejects invalid FTS query strings with an error: (#840)
+            if(_storageType == StorageEngineTypes.SQLite) {
+                query = view.CreateQuery();
+                query.FullTextQuery = "\"";
+                Action a = () => rows = query.Run().ToArray();
+                a.ShouldThrow<CouchbaseLiteException>().Where(e => e.Code == StatusCode.BadRequest, "because an invalid query should not succeed");
+            }
+        }
 
         [Test]
         public void TestDeleteViews()

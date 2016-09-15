@@ -37,7 +37,7 @@ using Couchbase.Lite.Util;
 using Couchbase.Lite.Views;
 using Couchbase.Lite.Storage.ForestDB.Internal;
 using Couchbase.Lite.Store;
-
+using System.Globalization;
 
 namespace Couchbase.Lite.Storage.ForestDB
 {
@@ -118,6 +118,14 @@ namespace Couchbase.Lite.Storage.ForestDB
             }
         }
 
+        static ForestDBViewStore()
+        {
+            var stemmer = CultureInfo.CurrentCulture.TwoLetterISOLanguageName;
+            if(stemmer != null) {
+                Native.c4key_setDefaultFullTextLanguage(stemmer, stemmer.Equals("en"));
+            }
+        }
+
         public ForestDBViewStore(ForestDBCouchStore dbStorage, string name, bool create)
         {
             Debug.Assert(dbStorage != null);
@@ -152,7 +160,14 @@ namespace Couchbase.Lite.Storage.ForestDB
                 if(keySources[i] == null && !writeNull) {
                     c4Keys[i] = null;
                 } else {
-                    c4Keys[i] = CouchbaseBridge.SerializeToKey(keySources[i]);
+                    var special = keySources[i] as SpecialKey;
+                    if(special != null) {
+                        if(special.Text != null) {
+                            c4Keys[i] = Native.c4key_newFullTextString(special.Text, null);
+                        }
+                    } else {
+                        c4Keys[i] = CouchbaseBridge.SerializeToKey(keySources[i]);
+                    }
                 }
             }
 
@@ -335,13 +350,20 @@ namespace Couchbase.Lite.Storage.ForestDB
                         opts.skip = (ulong)options.Skip;
                         opts.startKey = startEndKey[0];
                         opts.startKeyDocID = startkeydocid_.AsC4Slice();
-                        fixed (C4Key** keysPtr = c4keys)
-                        {
-                            opts.keys = keysPtr;
+                        if(options.FullTextQuery != null) {
                             enumerator = (C4QueryEnumerator*)ForestDBBridge.Check(err => {
                                 var localOpts = opts;
-                                return Native.c4view_query(IndexDB, &localOpts, err);
+                                return Native.c4view_fullTextQuery(IndexDB, options.FullTextQuery, null, &localOpts, err);
                             });
+                        } else {
+                            fixed (C4Key** keysPtr = c4keys)
+                            {
+                                opts.keys = keysPtr;
+                                enumerator = (C4QueryEnumerator*)ForestDBBridge.Check(err => {
+                                    var localOpts = opts;
+                                    return Native.c4view_query(IndexDB, &localOpts, err);
+                                });
+                            }
                         }
                     })
                 );
@@ -416,7 +438,7 @@ namespace Couchbase.Lite.Storage.ForestDB
         {
             try {
                 var row = new QueryRow(null, 0, group ? GroupKey(key, groupLevel) : null,
-                    CallReduce(reduce, keysToReduce, valsToReduce), null, this);
+                    CallReduce(reduce, keysToReduce, valsToReduce), null);
                 if(filter != null && filter(row)) {
                     row = null;
                 }
@@ -429,6 +451,17 @@ namespace Couchbase.Lite.Storage.ForestDB
                 throw Misc.CreateExceptionAndLog(Log.To.Query, e, Tag,
                     "Exception while running reduce query for {0}", Name);
             }
+        }
+
+        private bool RowPasses(QueryRow row, Func<QueryRow, bool> filter)
+        {
+            row.Move(_dbStorage.Delegate as Database, Delegate as View);
+            if(!filter(row)) {
+                return false;
+            }
+
+            row.ClearDatabase();
+            return true;
         }
 
         public void Close()
@@ -601,9 +634,20 @@ namespace Couchbase.Lite.Storage.ForestDB
                     docRevision = _dbStorage.GetDocument(next.DocID, null, optionsCopy.IncludeDocs);
                 }
 
-                var row = new QueryRow(next.DocID, next.DocSequence, key, value, docRevision, this);
+                var row = default(QueryRow);
+                if(options.FullTextQuery != null) {
+                    var ftrow = new FullTextQueryRow(next.DocID, next.DocSequence, next.FullTextID, value);
+                    row = ftrow;
+                    for(var i = 0; i < next.FullTextTermCount; i++) {
+                        var term = next.GetFullTextTerm(i);
+                        ftrow.AddTerm(term.termIndex, new Range((int)term.start, (int)term.length));
+                    }
+                } else {
+                    row = new QueryRow(next.DocID, next.DocSequence, key, value, docRevision);
+                }
+
                 if(filter != null) {
-                    if(!filter(row)) {
+                    if(!RowPasses(row, filter)) {
                         continue;
                     }
 
@@ -621,6 +665,8 @@ namespace Couchbase.Lite.Storage.ForestDB
                     new SecureLogJsonString(key, LogMessageSensitivity.PotentiallyInsecure),
                     new SecureLogString(value, LogMessageSensitivity.PotentiallyInsecure),
                     new SecureLogString(next.DocID, LogMessageSensitivity.PotentiallyInsecure));
+
+                row.Move(_dbStorage.Delegate as Database, Delegate as View);
                 yield return row;
             }
         }
@@ -698,6 +744,30 @@ namespace Couchbase.Lite.Storage.ForestDB
             if(row != null) {
                 yield return row;
             }
+        }
+
+        public IEnumerable<QueryRow> QueryWithOptions(QueryOptions options)
+        {
+            return options.Reduce ? ReducedQuery(options) : RegularQuery(options);
+        }
+
+        public byte[] FullTextForDocument(string docId, long sequenceNumber, ulong fullTextID)
+        {
+            C4Slice valueSlice = ForestDBBridge.Check(err => {
+                using(var docId_ = new C4String(docId)) {
+                    var r = Native.c4view_fullTextMatched(IndexDB, docId_.AsC4Slice(), (ulong)sequenceNumber, (uint)fullTextID, err);
+                    if(r.buf == null) {
+                        Log.To.View.W(Tag, "{0}: Couldn't find full text for doc <{1}>, seq {2}, fullTextID {3} (err {4}/{5})",
+                                      this, docId, sequenceNumber, fullTextID, err->domain, err->code);
+                    }
+
+                    return r;
+                }
+            });
+
+            var retVal = valueSlice.ToArray();
+            Native.c4slice_free(valueSlice);
+            return retVal;
         }
 
         public IQueryRowStore StorageForQueryRow(QueryRow row)

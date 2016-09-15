@@ -88,21 +88,7 @@ namespace Couchbase.Lite.Store
 
         UpdateJob CreateUpdateJob(IEnumerable<IViewStore> views);
 
-        /// <summary>
-        /// Queries the view without performing any reducing or grouping.
-        /// </summary>
-        IEnumerable<QueryRow> RegularQuery(QueryOptions options);
-
-        /// <summary>
-        /// Queries the view, with reducing or grouping as per the options.
-        /// </summary>
-        IEnumerable<QueryRow> ReducedQuery(QueryOptions options);
-
-        /*TODO: Full text
-        /// <summary>
-        /// Performs a full-text query as per the options.
-        /// </summary>
-        QueryEnumerator FullTextQuery(QueryOptions options);*/
+        IEnumerable<QueryRow> QueryWithOptions(QueryOptions options);
 
         /// <summary>
         /// Gets the backing store for the specified query row

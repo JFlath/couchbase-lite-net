@@ -82,6 +82,11 @@ namespace Couchbase.Lite.Storage.ForestDB
         {
             RetryHandler.RetryIfBusy().Execute(block);
         }
+
+        public static C4Slice Check(C4TryLogicDelegate4 block)
+        {
+            return RetryHandler.RetryIfBusy().Execute(block);
+        }
     }
 
     #endregion
@@ -236,6 +241,17 @@ namespace Couchbase.Lite.Storage.ForestDB
         #endregion
 
         #region Private Methods
+
+        private bool RowPasses(QueryRow row, Func<QueryRow, bool> filter)
+        {
+            row.Move(Delegate as Database, null);
+            if(!filter(row)) {
+                return false;
+            }
+
+            row.ClearDatabase();
+            return true;
+        }
 
         private CBForestHistoryEnumerator GetHistoryFromSequence(long sequence)
         {
@@ -929,8 +945,9 @@ namespace Couchbase.Lite.Storage.ForestDB
                 }
 
                 var row = new QueryRow(value == null ? null : docID, sequenceNumber, docID, value,
-                    value == null ? null : new ForestRevisionInternal(next, options.IncludeDocs), null);
-                if(options.Filter == null || options.Filter(row)) {
+                    value == null ? null : new ForestRevisionInternal(next, options.IncludeDocs));
+                if(options.Filter == null || RowPasses(row, options.Filter)) {
+                    row.Move(Delegate as Database, null);
                     yield return row;
                 } else {
                     Log.To.Query.V(TAG, "   ... on 2nd thought, filter predicate skipped that row");
@@ -941,7 +958,7 @@ namespace Couchbase.Lite.Storage.ForestDB
                 var value = GetAllDocsEntry(docId);
 
 
-                var row = new QueryRow(value != null ? docId as string : null, 0, docId, value, null, null);
+                var row = new QueryRow(value != null ? docId as string : null, 0, docId, value, null);
                 if(options.Filter == null || options.Filter(row)) {
                     yield return row;
                 }

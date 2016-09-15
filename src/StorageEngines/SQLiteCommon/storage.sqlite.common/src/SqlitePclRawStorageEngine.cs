@@ -44,6 +44,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -82,6 +83,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
         private const int TRANSACTION_MAX_RETRY_DELAY = 50; //milliseconds
 
         private const String TAG = "SqlitePCLRawStorageEngine";
+        private const string TokenizerName = "unicodesn";
         private sqlite3 _writeConnection;
         private sqlite3 _readConnection;
         private bool _readOnly; // Needed for issue with GetVersion()
@@ -90,11 +92,52 @@ namespace Couchbase.Lite.Storage.SQLCipher
         private TaskFactory Factory { get; set; }
         private CancellationTokenSource _cts = new CancellationTokenSource();
 
+        private struct sqlite3_tokenizer_module
+        {
+            
+        }
+
+        [DllImport("Tokenizer")]
+        private static unsafe extern void sqlite3Fts3UnicodeSnTokenizer(sqlite3_tokenizer_module **tokenizer);
+
         private bool IsOnDBThread {
             get {
                 var scheduler = Factory.Scheduler as SingleThreadScheduler;
                 return scheduler.IsOnSpecialThread;
             }
+        }
+
+        private unsafe int RegisterTokenizer(sqlite3 db)
+        {
+            sqlite3_tokenizer_module *tokenizer;
+            int rc;
+            sqlite3_stmt pStmt;
+            string zSql = "SELECT fts3_tokenizer(?, ?)";
+
+            try {
+                sqlite3Fts3UnicodeSnTokenizer(&tokenizer);
+            } catch(Exception) {
+                Log.To.Query.W(TAG, "Full text functionality not available, Tokenizer native library is missing!");
+                return raw.SQLITE_OK;
+            }
+
+            rc = raw.sqlite3_prepare_v2(db, zSql, out pStmt);
+            if(rc != raw.SQLITE_OK) {
+                throw new ugly.sqlite3_exception(rc);
+            }
+
+            var intptr = new IntPtr(tokenizer).ToInt32();
+            var bytes = BitConverter.GetBytes(intptr);
+
+            raw.sqlite3_bind_text(pStmt, 1, TokenizerName);
+            raw.sqlite3_bind_blob(pStmt, 2, bytes);
+            rc = raw.sqlite3_step(pStmt);
+            if(rc != raw.SQLITE_OK && rc < raw.SQLITE_ROW) {
+                var msg = raw.sqlite3_errmsg(db);
+                throw new ugly.sqlite3_exception(rc, msg);
+            }
+
+            return raw.sqlite3_finalize(pStmt);
         }
 
         #region ISQLiteStorageEngine
@@ -211,6 +254,8 @@ namespace Couchbase.Lite.Storage.SQLCipher
             raw.sqlite3_create_collation(db, "JSON_ASCII", null, CouchbaseSqliteJsonAsciiCollationFunction.Compare);
             raw.sqlite3_create_collation(db, "JSON_RAW", null, CouchbaseSqliteJsonRawCollationFunction.Compare);
             raw.sqlite3_create_collation(db, "REVID", null, CouchbaseSqliteRevIdCollationFunction.Compare);
+            RegisterTokenizer(db);
+            raw.sqlite3_create_function(db, "ftsrank", 1, raw.SQLITE_ANY, CouchbaseSqliteFtsRankFunction.Execute);
         }
 
         public int GetVersion()
@@ -495,8 +540,9 @@ namespace Couchbase.Lite.Storage.SQLCipher
             //var t = Factory.StartNew (() => 
             //{
                 Log.To.TaskScheduling.V(TAG, "Running RawQuery");
+                var connection = default(sqlite3);
                 try {
-                    var connection = IsOnDBThread ? _writeConnection : _readConnection;
+                    connection = IsOnDBThread ? _writeConnection : _readConnection;
                     Log.To.Database.V (TAG, "RawQuery sql ({2}): {0} ({1})", sql, String.Join (", ", paramArgs.ToStringArray ()), IsOnDBThread ? "read uncommit" : "read commit");
                     command = BuildCommand (connection, sql, paramArgs);
                     cursor = new Cursor (command);
@@ -509,8 +555,8 @@ namespace Couchbase.Lite.Storage.SQLCipher
                     Log.To.Database.E (TAG, String.Format("Error executing raw query '{0}' with values '{1}', rethrowing...", 
                         sql, paramArgs == null ? (object)String.Empty : 
                         new SecureLogJsonString(args, LogMessageSensitivity.PotentiallyInsecure)), e);
-                    LastErrorCode = raw.sqlite3_errcode(_readConnection);
-                    throw;
+                    LastErrorCode = raw.sqlite3_errcode(connection);
+                    throw new CouchbaseLiteException(e, new Status(StatusCode.BadRequest));
                 }
                 return cursor;
             //});

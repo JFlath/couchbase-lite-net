@@ -42,6 +42,7 @@
 
 
 using System;
+using SQLitePCL;
 
 namespace Couchbase.Lite.Storage
 {
@@ -78,6 +79,14 @@ namespace Couchbase.Lite.Storage
         public static Int32 Compare (object userData, String param1, String param2)
         {
             return RevIdCollator.Compare(param1, param2);
+        }
+    }
+
+    internal static class CouchbaseSqliteFtsRankFunction
+    {
+        public static void Execute(sqlite3_context ctx, object user_data, sqlite3_value[] args)
+        {
+            
         }
     }
 }

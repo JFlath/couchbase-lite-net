@@ -194,6 +194,12 @@ namespace Couchbase.Lite
         /// <value>The filter.</value>
         public Func<QueryRow, bool> Filter { get; set; }
 
+        public string FullTextQuery { get; set; }
+
+        public bool FullTextSnippets { get; set; }
+
+        public bool FullTextRanking { get; set; }
+
         #endregion
 
         #region Constructors

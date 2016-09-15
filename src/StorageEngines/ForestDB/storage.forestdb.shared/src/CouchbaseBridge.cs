@@ -70,8 +70,12 @@ namespace Couchbase.Lite.Storage.ForestDB.Internal
             return retVal;
         }
 
-        public static T DeserializeKey<T>(C4KeyReader keyReader)
+        public unsafe static T DeserializeKey<T>(C4KeyReader keyReader)
         {
+            if(keyReader.bytes == null) {
+                return default(T);
+            }
+
             using (var jsonReader = new JsonC4KeyReader(keyReader)) {
                 var serializer = new JsonSerializer();
                 serializer.ReferenceLoopHandling = ReferenceLoopHandling.Ignore;

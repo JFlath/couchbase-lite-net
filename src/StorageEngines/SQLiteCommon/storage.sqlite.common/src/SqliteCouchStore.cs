@@ -416,6 +416,17 @@ namespace Couchbase.Lite.Storage.SQLCipher
 
 #region Private Methods
 
+        private bool RowPasses(QueryRow row, Func<QueryRow, bool> filter)
+        {
+            row.Move(Delegate as Database, null);
+            if(!filter(row)) {
+                return false;
+            }
+
+            row.ClearDatabase();
+            return true;
+        }
+
         private static string JoinQuotedObjects(IEnumerable<Object> objects)
         {
             var strings = new List<String>();
@@ -1495,7 +1506,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
                         { "_conflicts", conflicts } // (not found in CouchDB)
                     };
 
-                    var row = new QueryRow(docId, sequence, docId, value, docRevision, null);
+                    var row = new QueryRow(docId, sequence, docId, value, docRevision);
                     if(options.Keys != null) {
                         docs[docId] = row;
                     } else if(options.Filter == null || options.Filter(row)) {
@@ -1530,10 +1541,11 @@ namespace Couchbase.Lite.Storage.SQLCipher
                             }
                         }
 
-                        change = new QueryRow(value != null ? docId as string : null, 0, docId, value, null, null);
+                        change = new QueryRow(value != null ? docId as string : null, 0, docId, value, null);
                     }
 
-                    if (options.Filter == null || options.Filter(change)) {
+                    if (options.Filter == null || RowPasses(change, options.Filter)) {
+                        change.Move(Delegate as Database, null);
                         rows.Add(change);
                     }
                 }

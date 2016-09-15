@@ -339,15 +339,7 @@ namespace Couchbase.Lite {
                 options = new QueryOptions();
             }
 
-            IEnumerable<QueryRow> iterator = null;
-            if (false) {
-                //TODO: Full text
-            } else if (GroupOrReduce(options)) {
-                iterator = Storage.ReducedQuery(options);
-            } else {
-                iterator = Storage.RegularQuery(options);
-            }
-
+            IEnumerable<QueryRow> iterator = Storage.QueryWithOptions(options);
             if (iterator != null) {
                 Log.To.Query.I(TAG, "Query {0}: Returning iterator", Name);
             } else {

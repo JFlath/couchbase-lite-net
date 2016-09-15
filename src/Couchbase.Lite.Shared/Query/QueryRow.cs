@@ -55,7 +55,7 @@ namespace Couchbase.Lite
     /// <summary>
     /// A result row for a Couchbase Lite <see cref="Couchbase.Lite.View"/> <see cref="Couchbase.Lite.Query"/>.
     /// </summary>
-    public sealed class QueryRow 
+    public class QueryRow 
     {
 
         #region Constants
@@ -64,16 +64,21 @@ namespace Couchbase.Lite
 
         #endregion
 
+        #region Properties
+
+        internal IQueryRowStore Storage { get; private set; }
+
+        #endregion
+
         #region Variables
-        
-        private IQueryRowStore _storage;
+
         private object _parsedKey, _parsedValue;
 
         #endregion
 
     #region Constructors
 
-        internal QueryRow(string documentId, long sequence, object key, object value, RevisionInternal revision, IQueryRowStore storage)
+        internal QueryRow(string documentId, long sequence, object key, object value, RevisionInternal revision)
         {
             // Don't initialize _database yet. I might be instantiated on a background thread (if the
             // query is async) which has a different CBLDatabase instance than the original caller.
@@ -83,7 +88,6 @@ namespace Couchbase.Lite
             _key = key;
             _value = value;
             DocumentRevision = revision;
-            _storage = storage;
         }
 
     #endregion
@@ -245,7 +249,7 @@ namespace Couchbase.Lite
                 var valueData = value as IEnumerable<byte>;
                 if (valueData != null) {
                     // _value may start out as unparsed Collatable data
-                    var storage = _storage;
+                    var storage = Storage;
                     Debug.Assert(storage != null);
                     if (storage.RowValueIsEntireDoc(valueData)) {
                         // Value is a placeholder ("*") denoting that the map function emitted "doc" as
@@ -316,6 +320,24 @@ namespace Couchbase.Lite
             }
 
             return result;
+        }
+
+        internal void ClearDatabase()
+        {
+            Database = null;
+            Storage = null;
+        }
+
+        internal void Move(Database database, View view)
+        {
+            if(database == null) {
+                throw new ArgumentNullException(nameof(database));
+            }
+
+            if(database != Database) {
+                Database = database;
+                Storage = view.Storage.StorageForQueryRow(this);
+            }
         }
 
         /// <summary>

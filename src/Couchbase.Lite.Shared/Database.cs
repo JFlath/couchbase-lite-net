@@ -1301,7 +1301,7 @@ namespace Couchbase.Lite
                     { "rev", rev.RevID.ToString() },
                     { "deleted", rev.Deleted ? (object)true : null }
                 };
-                result.Add(new QueryRow(rev.DocID, seq, rev.DocID, value, rev, null));
+                result.Add(new QueryRow(rev.DocID, seq, rev.DocID, value, rev));
             }
 
             return result;

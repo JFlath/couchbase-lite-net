@@ -40,17 +40,30 @@
 // and limitations under the License.
 //
 
-namespace Couchbase.Lite.Support
+namespace Couchbase.Lite
 {
-    internal class Range
+    public sealed class Range
     {
-        public int Location;
-        public int Length;
+        public static readonly int NotFound = -1;
+
+        public int Location { get; set; }
+        public int Length { get; set; }
 
         internal Range(int location, int length)
         {
             Location = location;
             Length = length;
+        }
+
+        public override bool Equals(object obj)
+        {
+            var other = obj as Range;
+            return Location == other?.Location && Length == other?.Length;
+        }
+
+        public override int GetHashCode()
+        {
+            return Location.GetHashCode() ^ Length.GetHashCode();
         }
     }
 }

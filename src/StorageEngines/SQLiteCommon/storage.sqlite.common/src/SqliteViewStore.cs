@@ -22,7 +22,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 
 using Couchbase.Lite.Internal;
@@ -32,6 +34,7 @@ using Couchbase.Lite.Store;
 using Couchbase.Lite.Util;
 using Couchbase.Lite.Views;
 using SQLitePCL;
+using SQLitePCL.Ugly;
 
 #if SQLITE
 namespace Couchbase.Lite.Storage.SystemSQLite
@@ -57,9 +60,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
         private int _viewId;
         private ViewCollation _collation;
         private bool _initializedRTreeSchema;
-
-        //TODO: Full text
-        //private bool _initializedFullTextSchema;
+        private bool _initializedFullTextSchema;
 
         #endregion
 
@@ -202,6 +203,69 @@ namespace Couchbase.Lite.Storage.SQLCipher
             }
         }
 
+        [DllImport("Tokenizer")]
+        private static extern int sqlite3FtsUnicodeIsalnum(int n);
+
+        private bool CreateFullTextSchema()
+        {
+            if(_initializedFullTextSchema) {
+                return true;
+            }
+
+            if(raw.sqlite3_compileoption_used("SQLITE_ENABLE_FTS3") == 0 || 
+               raw.sqlite3_compileoption_used("SQLITE_ENABLE_FTS4") == 0) {
+                Log.To.Query.W(Tag, "Can't index full text: SQLite isn't built with FTS3 or FTS4 module");
+                return false;
+            }
+
+            try {
+                sqlite3FtsUnicodeIsalnum(0);
+            } catch(Exception) {
+                Log.To.Query.W(Tag, "Can't index full text: Tokenizer native library missing");
+                return false;
+            }
+
+            var stemmerName = CultureInfo.CurrentCulture.TwoLetterISOLanguageName;
+            var stemmer = String.Empty;
+            if(stemmerName != null) {
+                stemmer = $"\"stemmer={stemmerName}\"";
+            }
+
+            var sql = "\n" +
+                "CREATE VIRTUAL TABLE IF NOT EXISTS fulltext\n" +
+                $"    USING fts4(content, tokenize=unicodesn {stemmer});\n" +
+                "CREATE INDEX IF NOT EXISTS  'maps_#_by_fulltext' ON 'maps_#'(fulltext_id);\n" +
+                "CREATE TRIGGER IF NOT EXISTS 'del_maps_#_fulltext'\n" +
+                "    DELETE ON 'maps_#' WHEN old.fulltext_id not null BEGIN\n" +
+                "        DELETE FROM fulltext WHERE rowid=old.fulltext_id| END";
+
+            RunStatements(sql);
+            _initializedFullTextSchema = true;
+            return true;
+        }
+
+        private bool CreateRTreeSchema()
+        {
+            if(_initializedRTreeSchema) {
+                return true;
+            }
+
+            if(raw.sqlite3_compileoption_used("SQLITE_ENABLE_RTREE") == 0) {
+                Log.To.Query.W(Tag, "Can't geo-query:  SQLite isn't built with the Rtree module");
+                return false;
+            }
+
+            var sql = "\n" +
+                "CREATE VIRTUAL TABLE IF NOT EXISTS bboxes USING rtree(rowid, x0, x1, y0, y1);" +
+                "CREATE TRIGGER IF NOT EXISTS 'del_maps_#_bbox'\n" +
+                "    DELETE ON 'maps_#' WHEN old.bbox_id not null BEGIN" +
+                "    DELETE FROM bboxes WHERE rowid=old.bbox_id| END";
+
+            RunStatements(sql);
+            _initializedRTreeSchema = true;
+            return true;
+        }
+
         private StatusCode Emit(object key, object value, bool valueIsDoc, long sequence)
         {
             var db = _dbStorage;
@@ -212,10 +276,25 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 valueJSON = Manager.GetObjectMapper().WriteValueAsString(value);
             }
 
-            string keyJSON;
+            string keyJSON = null;
             //IEnumerable<byte> geoKey = null;
-            if (false) {
-                //TODO: bbox, geo, fulltext
+            var specialKey = key as SpecialKey;
+            var fullTextID = 0L;
+            if(specialKey != null) {
+                Log.To.View.V(Tag, "    emit({0}, {1}", specialKey,
+                              new SecureLogJsonString(value, LogMessageSensitivity.PotentiallyInsecure));
+                var text = specialKey.Text;
+                if(text != null) {
+                    if(!CreateFullTextSchema()) {
+                        throw Misc.CreateExceptionAndLog(Log.To.View, StatusCode.NotImplemented, Tag, "Unable to emit full text key");
+                    }
+
+                    fullTextID = db.StorageEngine.Insert("fulltext", null, new ContentValues {
+                        ["content"] = text
+                    });
+                }
+
+                key = null;
             } else {
                 keyJSON = Manager.GetObjectMapper().WriteValueAsString(key);
                 Log.To.Query.V(Tag, "    emit({0}, {1}", 
@@ -232,9 +311,9 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 "fulltext_id, bbox_id, geokey) VALUES (?, ?, ?, ?, ?, ?)");
             }
 
-            //TODO: bbox, geo, fulltext
+            //TODO: bbox, geo
             try {
-                db.StorageEngine.ExecSQL(_emitSql, sequence, keyJSON, valueJSON, null, null, null);
+                db.StorageEngine.ExecSQL(_emitSql, sequence, keyJSON, valueJSON, fullTextID, null, null);
             } catch(Exception) {
                 return StatusCode.DbError;
             }
@@ -256,35 +335,6 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 throw Misc.CreateExceptionAndLog(Log.To.View, e, Tag,
                     "Couldn't create view SQL index `{0}`", Name);
             }
-        }
-            
-        private bool CreateRTreeSchema()
-        {
-            if (_initializedRTreeSchema) {
-                return true;
-            }
-
-            if (raw.sqlite3_compileoption_used("SQLITE_ENABLE_RTREE") == 0) {
-                Log.To.Query.W(Tag, "Can't geo-query: SQLite isn't built with the Rtree module");
-                return false;
-            }
-
-            const string sql = "CREATE VIRTUAL TABLE IF NOT EXISTS bboxes USING rtree(rowid, x0, x1, y0, y1);" +
-            "CREATE TRIGGER IF NOT EXISTS 'del_maps_#_bbox' " +
-            "DELETE ON 'maps_#' WHEN old.bbox_id not null BEGIN " +
-            "DELETE FROM bboxes WHERE rowid=old.bbox_id| END";
-
-            try {
-                RunStatements(sql);
-            } catch(CouchbaseLiteException) {
-                Log.To.View.E(Tag, "Error initializing rtree schema for `{0}`, rethrowing...", Name);
-                throw;
-            } catch(Exception e) {
-                throw Misc.CreateExceptionAndLog(Log.To.View, e, Tag, "Error initializing rtree schema");
-            }
-
-            _initializedRTreeSchema = true;
-            return true;
         }
 
         private static bool GroupTogether(byte[] key1, byte[] key2, int groupLevel)
@@ -499,6 +549,17 @@ namespace Couchbase.Lite.Storage.SQLCipher
             }, sql.ToString(), args.ToArray());
 
             return status;
+        }
+
+        private bool RowPasses(QueryRow row, Func<QueryRow, bool> filter)
+        {
+            row.Move(_dbStorage.Delegate as Database, Delegate as View);
+            if(!filter(row)) {
+                return false;
+            }
+
+            row.ClearDatabase();
+            return true;
         }
 
         #endregion
@@ -863,6 +924,9 @@ namespace Couchbase.Lite.Storage.SQLCipher
                                         sequence, docId, e.Current.Name);
                                     try {
                                         mapBlocks[viewIndex](currentDoc, emit);
+                                    } catch(CouchbaseLiteException x) {
+                                        Log.To.View.E(Tag, String.Format("Exception in map() block for view {0}, cancelling update...", currentView.Name), x);
+                                        emitStatus.Code = x.Code;
                                     } catch (Exception x) {
                                         Log.To.View.E(Tag, String.Format("Exception in map() block for view {0}, cancelling update...", currentView.Name), x);
                                         emitStatus.Code = StatusCode.Exception;
@@ -926,13 +990,26 @@ namespace Couchbase.Lite.Storage.SQLCipher
                                                          select store._dbStorage.LastSequence);
         }
 
+        public IEnumerable<QueryRow> QueryWithOptions(QueryOptions options)
+        {
+            if(options.FullTextQuery != null) {
+                return FullTextQuery(options);
+            } 
+
+            if(options.Reduce) {
+                return ReducedQuery(options);
+            }
+
+            return RegularQuery(options);
+        }
+
         public IEnumerable<QueryRow> RegularQuery(QueryOptions options)
         {
             var db = _dbStorage;
             var filter = options.Filter;
             int limit = int.MaxValue;
             int skip = 0;
-            if (filter != null) {
+            if(filter != null) {
                 // Custom post-filter means skip/limit apply to the filtered rows, not to the
                 // underlying query, so handle them specially:
                 limit = options.Limit;
@@ -942,8 +1019,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
             }
 
             var rows = new List<QueryRow>();
-            RunQuery(options, (keyData, valueData, docId, cursor) =>
-            {
+            RunQuery(options, (keyData, valueData, docId, cursor) => {
                 long sequence = cursor.GetLong(3);
                 RevisionInternal docRevision = null;
                 if(options.IncludeDocs) {
@@ -972,11 +1048,11 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 if(false) {
                     //TODO: bbox
                 } else {
-                    row = new QueryRow(docId, sequence, keyData.Value, valueData.Value, docRevision, this);
+                    row = new QueryRow(docId, sequence, keyData.Value, valueData.Value, docRevision);
                 }
 
                 if(filter != null) {
-                    if(!filter(row)) {
+                    if(!RowPasses(row, filter)) {
                         return new Status(StatusCode.Ok);
                     }
 
@@ -990,19 +1066,21 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 if(limit-- == 0) {
                     return new Status(StatusCode.Reserved);
                 }
+
+                row.Move(_dbStorage.Delegate as Database, Delegate as View);
                 rows.Add(row);
 
                 return new Status(StatusCode.Ok);
             });
 
             // If given keys, sort the output into that order, and add entries for missing keys:
-            if (options.Keys != null) {
+            if(options.Keys != null) {
                 // Group rows by key:
                 var rowsByKey = new Dictionary<string, List<QueryRow>>();
-                foreach (var row in rows) {
+                foreach(var row in rows) {
                     var key = ToJSONString(row.Key);
                     var dictRows = rowsByKey.Get(key);
-                    if (dictRows == null) {
+                    if(dictRows == null) {
                         dictRows = rowsByKey[key] = new List<QueryRow>();
                     }
 
@@ -1011,13 +1089,13 @@ namespace Couchbase.Lite.Storage.SQLCipher
 
                 // Now concatenate them in the order the keys are given in options:
                 var sortedRows = new List<QueryRow>();
-                foreach (var key in options.Keys.Select(x => ToJSONString(x))) {
-                    if (key == null) {
+                foreach(var key in options.Keys.Select(x => ToJSONString(x))) {
+                    if(key == null) {
                         continue;
                     }
 
                     var dictRows = rowsByKey.Get(key);
-                    if (dictRows != null) {
+                    if(dictRows != null) {
                         sortedRows.AddRange(dictRows);
                     }
                 }
@@ -1058,7 +1136,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
                         // This pair starts a new group, so reduce & record the last one:
                         var key = GroupKey(lastKeyData.Value, groupLevel);
                         var reduced = CallReduce(reduce, keysToReduce, valuesToReduce);
-                        var row = new QueryRow(null, 0, key, reduced, null, this);
+                        var row = new QueryRow(null, 0, key, reduced, null);
                         if(options.Filter == null || options.Filter(row)) {
                             rows.Add(row);
                         }
@@ -1098,14 +1176,93 @@ namespace Couchbase.Lite.Storage.SQLCipher
                     new SecureLogJsonString(key, LogMessageSensitivity.PotentiallyInsecure),
                     new SecureLogJsonString(reduced, LogMessageSensitivity.PotentiallyInsecure));
 
-                var row = new QueryRow(null, 0, key, reduced, null, this);
-                if (options.Filter == null || options.Filter(row)) {
+                var row = new QueryRow(null, 0, key, reduced, null);
+                if (options.Filter == null || RowPasses(row, options.Filter)) {
+                    row.Move(_dbStorage.Delegate as Database, Delegate as View);
                     rows.Add(row);
                 }
             }
 
             return rows;
         }
+
+        public IEnumerable<QueryRow> FullTextQuery(QueryOptions options)
+        {
+            if(!CreateFullTextSchema()) {
+                throw Misc.CreateExceptionAndLog(Log.To.Query, StatusCode.NotImplemented, Tag, "Unable to perform full text query");
+            }
+
+            var sql = new StringBuilder("SELECT docs.docid, 'maps_#'.sequence, 'maps_#'.fulltext_id, 'maps_#'.value, " +
+                                        "offsets(fulltext)");
+            if(options.FullTextSnippets) {
+                sql.Append(", snippet(fulltext, '\001','\002','…')");
+            }
+
+            sql.Append(" FROM 'maps_#', fulltext, revs, docs " +
+                       "WHERE fulltext.content MATCH ? AND 'maps_#'.fulltext_id = fulltext.rowid " +
+                       "AND revs.sequence = 'maps_#'.sequence AND docs.doc_id = revs.doc_id ");
+            if(options.FullTextRanking) {
+                sql.Append("ORDER BY - ftsrank(matchinfo(fulltext)) ");
+            } else {
+                sql.Append("ORDER BY 'maps_#'.sequence ");
+            }
+
+            if(options.Descending) {
+                sql.Append(" DESC");
+            }
+
+            sql.Append(" LIMIT ? OFFSET ?");
+            var limit = options.Limit != QueryOptions.DefaultLimit ? options.Limit : -1;
+            var filter = options.Filter;
+            var dbStorage = _dbStorage;
+            var c = default(Cursor);
+            try {
+                c = dbStorage.StorageEngine.RawQuery(QueryString(sql.ToString()), options.FullTextQuery, limit, options.Skip);
+            } catch(CouchbaseLiteException ex) {
+                var e = ex.InnerException as ugly.sqlite3_exception;
+                if(e == null) {
+                    throw;
+                }
+
+                if(e.errcode == raw.SQLITE_ERROR) {
+                    throw Misc.CreateExceptionAndLog(Log.To.Query, e, StatusCode.BadRequest, Tag, "Error performing FTSquery ");
+                } else {
+                    throw Misc.CreateExceptionAndLog(Log.To.Query, e, dbStorage.LastDbError.Code, Tag, "Error performing FTS query");
+                }
+            }
+
+            try {
+                while(c.MoveToNext()) {
+                    var docID = c.GetString(0);
+                    var sequence = c.GetLong(1);
+                    var fullTextID = (ulong)c.GetInt(2);
+                    var valueData = c.GetBlob(3);
+                    var row = new FullTextQueryRow(docID, sequence, fullTextID, valueData);
+
+                    // Parse the offsets as a space-delimited list of numbers, into an array.
+                    // (See http://sqlite.org/fts3.html#section_4_1 )
+                    var offsets = c.GetString(4).Split(' ');
+                    for(var i = 0; i + 3 < offsets.Length; i += 4) {
+                        var term = UInt32.Parse(offsets[i + 1]);
+                        var location = Int32.Parse(offsets[i + 2]);
+                        var length = Int32.Parse(offsets[i + 3]);
+                        row.AddTerm(term, new Range(location, length));
+                    }
+
+                    if(options.FullTextSnippets) {
+                        row.Snippet = c.GetString(5);
+                    }
+
+                    if(filter == null || RowPasses(row, filter)) {
+                        row.Move(_dbStorage.Delegate as Database, Delegate as View);
+                        yield return row;
+                    }
+                }
+            } finally {
+                c.Dispose();
+            }
+        }
+
 
         public IQueryRowStore StorageForQueryRow(QueryRow row)
         {
@@ -1114,13 +1271,12 @@ namespace Couchbase.Lite.Storage.SQLCipher
 
         public IEnumerable<IDictionary<string, object>> Dump()
         {
-            if (ViewID <= 0) {
+            if(ViewID <= 0) {
                 return null;
             }
 
             List<IDictionary<string, object>> retVal = new List<IDictionary<string, object>>();
-            _dbStorage.TryQuery(c =>
-            {
+            _dbStorage.TryQuery(c => {
                 retVal.Add(new Dictionary<string, object>() {
                     { "seq", c.GetLong(0) },
                     { "key", c.GetString(1) },
@@ -1140,17 +1296,17 @@ namespace Couchbase.Lite.Storage.SQLCipher
         public bool RowValueIsEntireDoc(object valueData)
         {
             var valueString = valueData as IEnumerable<byte>;
-            if (valueString == null) {
+            if(valueString == null) {
                 return false;
             }
 
             bool first = true;
-            foreach (var character in valueString) {
-                if (!first) {
+            foreach(var character in valueString) {
+                if(!first) {
                     return false;
                 }
 
-                if (character != (byte)'*') {
+                if(character != (byte)'*') {
                     return false;
                 }
 
@@ -1168,6 +1324,16 @@ namespace Couchbase.Lite.Storage.SQLCipher
         public IDictionary<string, object> DocumentProperties(string docId, long sequenceNumber)
         {
             return _dbStorage.GetDocument(docId, sequenceNumber).GetProperties();
+        }
+
+        public byte[] FullTextForDocument(string docId, long sequenceNumber, ulong fullTextID)
+        {
+            if(fullTextID == 0UL) {
+                return null;
+            }
+
+            return _dbStorage.QueryOrDefault<byte[]>(c => c.GetBlob(0), null,
+                                                     "SELECT content FROM fulltext WHERE rowid=?", (long)fullTextID);
         }
 
         #endregion

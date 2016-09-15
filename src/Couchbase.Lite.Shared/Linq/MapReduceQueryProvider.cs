@@ -206,7 +206,7 @@ namespace Couchbase.Lite.Linq
         {
             var mapFunction = (Func<QueryRow, bool>)_where.Compile();
             var selectFunction = _select.Compile();
-            var fakeRow = new QueryRow(doc.CblID(), doc.GetCast<long>("_local_seq"), null, null, new RevisionInternal(doc), null);
+            var fakeRow = new QueryRow(doc.CblID(), doc.GetCast<long>("_local_seq"), null, null, new RevisionInternal(doc));
             if(mapFunction(fakeRow)) {
                 emit(selectFunction.DynamicInvoke(fakeRow), null);
             }
