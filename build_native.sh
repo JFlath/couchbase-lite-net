@@ -25,7 +25,7 @@ if [ $? != 0 ]; then
   exit 1
 fi
 
-if [ IsMac ]; then
+if $IsMac ; then
   capable="OS X, iOS, and Android"
 else
   capable="Android and Linux"
@@ -34,7 +34,7 @@ fi
 dialog --title "Confirm" --msgbox "The detected OS is $OS.\nThis OS is capable of building $capable" 8 35
 
 exec 3>&1
-if [ IsMac ]; then
+if $IsMac ; then
   selection=$(dialog --checklist "Choose platforms:" 10 40 3 \
     1 "OS X" on \
     2 iOS on \
@@ -63,7 +63,7 @@ for s in $selection; do
       vendor/sqlite3-unicodesn/build-interop-ios-fat.sh
       src/StorageEngines/ForestDB/CBForest/CSharp/NativeBuild/build-interop-ios-fat.sh
     fi
-  else
+  elif [[ "$s" == "3" ]]; then
     which ndk-build > /dev/null
     if [ $? != 0 ]; then
       clear
@@ -78,5 +78,15 @@ for s in $selection; do
     cp -R libs/* ../prebuilt/
     rm -rf libs
     popd
+  else
+    pushd vendor/sqlite3-unicodesn
+    make clean
+    make
+    popd
+    pushd src/StorageEngines/ForestDB/CBForest/CSharp/NativeBuild
+    make clean
+    make
+    make install
+    popd 	
   fi
 done
