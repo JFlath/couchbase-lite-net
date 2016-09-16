@@ -6,6 +6,7 @@ function download_cbforest {
     pushd src/StorageEngines/ForestDB/CBForest/CSharp/prebuilt
     wget https://github.com/couchbaselabs/cbforest/releases/download/1.3-net/1.3-CBForest-Interop.zip
     unzip 1.3-CBForest-Interop.zip -d .
+    rm 1.3-CBForest-Interop.zip
     popd
   fi
 }
@@ -18,8 +19,10 @@ function download_cbsqlite {
     curl -L https://github.com/couchbase/couchbase-lite-java-native/raw/master/vendor/sqlite/libs/osx/libsqlite3.dylib -o libcbsqlite3.dylib
   elif [[ "$platform" == "2" ]]; then
     echo "Downloading x86/cbsqlite3.dll (Windows)"
+    mkdir -p x86
     curl -L https://github.com/couchbase/couchbase-lite-java-native/raw/master/vendor/sqlite/libs/windows/x86/sqlite3.dll -o x86/cbsqlite3.dll
     echo "Downloading x64/cbsqlite3.dll (Windows)"
+    mkdir -p x64 
     curl -L https://github.com/couchbase/couchbase-lite-java-native/raw/master/vendor/sqlite/libs/windows/x86_64/sqlite3.dll -o x64/cbsqlite3.dll
   elif [[ "$platform" == "3" ]]; then
     echo "Downloading libcbsqlite.so (Linux 64-bit)"
