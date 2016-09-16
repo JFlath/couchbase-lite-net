@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+	<OSType Condition="Exists('/Library/Frameworks/')">Mac</OSType>
+    <OSType Condition="!Exists('/Library/Frameworks/')">Linux</OSType>
     <mdb>dll.mdb</mdb>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
+	<OSType>Windows</OSType>
     <mdb>pdb</mdb>
   </PropertyGroup>
   <PropertyGroup>
@@ -74,19 +77,19 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\CBForest\CSharp\prebuilt\x86\CBForest-Interop.dll">
+    <None Condition="Exists('..\CBForest\CSharp\prebuilt\x86\CBForest-Interop.dll')" Include="..\CBForest\CSharp\prebuilt\x86\CBForest-Interop.dll">
       <Link>x86\CBForest-Interop.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\CBForest\CSharp\prebuilt\x64\CBForest-Interop.dll">
+    <None Condition="Exists('..\CBForest\CSharp\prebuilt\x64\CBForest-Interop.dll')" Include="..\CBForest\CSharp\prebuilt\x64\CBForest-Interop.dll">
       <Link>x64\CBForest-Interop.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.dylib">
+    <None Condition="Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.dylib')" Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.dylib">
       <Link>libCBForest-Interop.dylib</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.so">
+    <None Condition="Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.so">
       <Link>libCBForest-Interop.so</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
@@ -95,4 +98,9 @@
     </None>
     <None Include="packages.config" />
   </ItemGroup>
+    <Target Name="BeforeBuild">
+        <Error Condition=" '$(OSType)' == 'Mac' AND !Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.dylib')" Code="CBL-BLD002" Text="CBForest-Interop native library not present, cannot build ForestDB storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0002" />
+        <Error Condition=" '$(OSType)' == 'Linux' AND !Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.so')" Code="CBL-BLD002" Text="CBForest-Interop native library not present, cannot build ForestDB storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0002" />
+        <Error Condition=" '$(OSType)' == 'Windows' AND (!Exists('..\CBForest\CSharp\prebuilt\x86\CBForest-Interop.dll') OR !Exists('..\CBForest\CSharp\prebuilt\x64\CBForest-Interop.dll'))" Code="CBL-BLD002" Text="CBForest-Interop native library not present, cannot build ForestDB storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0002" />
+    </Target>
 </Project>

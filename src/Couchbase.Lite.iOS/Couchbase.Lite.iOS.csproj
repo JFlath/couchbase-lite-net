@@ -5,8 +5,10 @@
     <MonoPrefix Condition=" '$(OS)' == 'Windows_NT' ">
     </MonoPrefix>
     <AssemblyName>Couchbase.Lite</AssemblyName>
+    <DefineConstants Condition="Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.a')">"$(DefineConstants);IOS_FTS</DefineConstants>
   </PropertyGroup>
   <Target Condition=" !$(DefineConstants.Contains('OFFICIAL')) " Name="SetAssemblyVersion" BeforeTargets="PrepareForBuild">
+    <Warning Condition=" !Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.a')" Code="CBL-BLD001" Text="Tokenizer native library not present, full text search will not be available!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0001" />
     <Exec Command="$(MonoPrefix)$(ProjectDir)..\..\Tools\GitVersion\GitVersion.exe &quot;$(ProjectDir)..\..&quot; &quot;$(ProjectDir)..\Couchbase.Lite.Shared\Properties\version&quot;" />
   </Target>
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
@@ -106,6 +108,7 @@
     <Compile Include="CouchbaseTableSource.cs" />
     <Compile Include="ReloadEventArgs.cs" />
     <Compile Include="SecureStorage.cs" />
+    <Compile Condition="Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.a')" Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
   <ItemGroup>
@@ -123,5 +126,10 @@
   </ItemGroup>
   <ItemGroup>
     <Service Include="{508349B6-6B84-4DF5-91F0-309BEEBAD82D}" />
+  </ItemGroup>
+  <ItemGroup>
+    <ManifestResourceWithNoCulture Condition="Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.a')" Include="..\..\vendor\sqlite3-unicodesn\libTokenizer.a">
+      <Link>libTokenizer.a</Link>
+    </ManifestResourceWithNoCulture>
   </ItemGroup>
 </Project>

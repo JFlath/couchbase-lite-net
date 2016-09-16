@@ -84,23 +84,26 @@
     <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedNativeLibrary Include="..\CBForest\CSharp\prebuilt\armeabi\libCBForest-Interop.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\CBForest\CSharp\prebuilt\armeabi\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\armeabi\libCBForest-Interop.so">
       <Link>armeabi\libCBForest-Interop.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\CBForest\CSharp\prebuilt\arm64-v8a\libCBForest-Interop.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\CBForest\CSharp\prebuilt\arm64-v8a\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\arm64-v8a\libCBForest-Interop.so">
       <Link>arm64-v8a\libCBForest-Interop.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\CBForest\CSharp\prebuilt\armeabi-v7a\libCBForest-Interop.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\CBForest\CSharp\prebuilt\armeabi-v7a\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\armeabi-v7a\libCBForest-Interop.so">
       <Link>armeabi-v7a\libCBForest-Interop.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\CBForest\CSharp\prebuilt\x86\libCBForest-Interop.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\CBForest\CSharp\prebuilt\x86\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\x86\libCBForest-Interop.so">
       <Link>x86\libCBForest-Interop.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\CBForest\CSharp\prebuilt\x86_64\libCBForest-Interop.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\CBForest\CSharp\prebuilt\x86_64\libCBForest-Interop.so')" Include="..\CBForest\CSharp\prebuilt\x86_64\libCBForest-Interop.so">
       <Link>x86_64\libCBForest-Interop.so</Link>
     </EmbeddedNativeLibrary>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
+  <Target Name="CheckNativeLibs" BeforeTargets="_CreateNativeLibraryArchive">
+        <Error Condition=" !Exists('..\CBForest\CSharp\prebuilt\armeabi\libCBForest-Interop.so') Or !Exists('..\CBForest\CSharp\prebuilt\arm64-v8\libCBForest-Interop.so') Or !Exists('..\CBForest\CSharp\prebuilt\armeabi-v7a\libCBForest-Interop.so') Or !Exists('..\CBForest\CSharp\prebuilt\x86\libCBForest-Interop.so') Or !Exists('..\CBForest\CSharp\prebuilt\x86_64\libCBForest-Interop.so')" Code="CBL-BLD002" Text="CBForest-Interop native library not present, cannot build ForestDB storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0002" />
+  </Target>
 </Project>

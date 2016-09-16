@@ -97,7 +97,11 @@ namespace Couchbase.Lite.Storage.SQLCipher
             
         }
 
+        #if __IOS__
+        [DllImport ("__Internal")]
+        #else
         [DllImport("Tokenizer")]
+        #endif
         private static unsafe extern void sqlite3Fts3UnicodeSnTokenizer(sqlite3_tokenizer_module **tokenizer);
 
         private bool IsOnDBThread {

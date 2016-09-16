@@ -1,14 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+	<OSType Condition="Exists('/Library/Frameworks/')">Mac</OSType>
+    <OSType Condition="!Exists('/Library/Frameworks/')">Linux</OSType>
     <MonoPrefix>mono </MonoPrefix>
     <mdb>dll.mdb</mdb>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
+	<OSType>Windows</OSType>
     <MonoPrefix />
     <mdb>pdb</mdb>
   </PropertyGroup>
   <Target Name="SetAssemblyVersion" BeforeTargets="PrepareForBuild">
+	<Warning Condition=" '$(OSType)' == 'Mac' AND !Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.dylib')" Code="CBL-BLD001" Text="Tokenizer native library not present, full text search will not be available!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0001" />
+	<Warning Condition=" '$(OSType)' == 'Linux' AND !Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.so')" Code="CBL-BLD001" Text="Tokenizer native library not present, full text search will not be available!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0001" />
+	<Warning Condition=" '$(OSType)' == 'Windows' AND (!Exists('..\..\vendor\sqlite3-unicodesn\x86\Tokenizer.dll') OR !Exists('..\..\vendor\sqlite3-unicodesn\x64\Tokenizer.dll'))" Code="CBL-BLD001" Text="Tokenizer native library not present, full text search will not be available!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0001" />
     <Exec Command="$(MonoPrefix)$(ProjectDir)..\..\Tools\GitVersion\GitVersion.exe &quot;$(ProjectDir)..\..&quot; &quot;$(ProjectDir)..\Couchbase.Lite.Shared\Properties\version&quot;" />
   </Target>
   <PropertyGroup>
@@ -85,8 +91,20 @@
     <None Include="packages.config">
       <SubType>Designer</SubType>
     </None>
-    <None Include="..\..\vendor\sqlite3-unicodesn\libTokenizer.dylib">
+    <None Condition="Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.dylib')" Include="..\..\vendor\sqlite3-unicodesn\libTokenizer.dylib">
       <Link>libTokenizer.dylib</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+	<None Condition="Exists('..\..\vendor\sqlite3-unicodesn\libTokenizer.so')" Include="..\..\vendor\sqlite3-unicodesn\libTokenizer.so">
+      <Link>libTokenizer.so</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+	<None Condition="Exists('..\..\vendor\sqlite3-unicodesn\x86\Tokenizer.dll')" Include="..\..\vendor\sqlite3-unicodesn\x86\Tokenizer.dll">
+      <Link>x86\Tokenizer.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+	<None Condition="Exists('..\..\vendor\sqlite3-unicodesn\x64\Tokenizer.dll')" Include="..\..\vendor\sqlite3-unicodesn\x64\Tokenizer.dll">
+      <Link>x64\Tokenizer.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

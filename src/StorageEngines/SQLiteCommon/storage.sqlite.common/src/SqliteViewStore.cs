@@ -203,7 +203,11 @@ namespace Couchbase.Lite.Storage.SQLCipher
             }
         }
 
+        #if __IOS__
+        [DllImport ("__Internal")]
+        #else
         [DllImport("Tokenizer")]
+        #endif
         private static extern int sqlite3FtsUnicodeIsalnum(int n);
 
         private bool CreateFullTextSchema()

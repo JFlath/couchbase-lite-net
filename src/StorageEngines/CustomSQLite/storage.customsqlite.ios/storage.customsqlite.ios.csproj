@@ -21,6 +21,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -31,6 +32,7 @@
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
     <DefineConstants>CUSTOM_SQLITE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Packaging|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>
@@ -41,6 +43,7 @@
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
     <DefineConstants>__UNIFIED__;__MOBILE__;__IOS__;CUSTOM_SQLITE</DefineConstants>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
@@ -60,7 +63,7 @@
     <Folder Include="Properties\" />
   </ItemGroup>
   <ItemGroup>
-    <ManifestResourceWithNoCulture Include="..\vendor\sqlite\libsqlite3.a">
+    <ManifestResourceWithNoCulture Condition="Exists('..\vendor\sqlite\libsqlite3.a')" Include="..\vendor\sqlite\libsqlite3.a">
       <Link>libsqlite3.a</Link>
     </ManifestResourceWithNoCulture>
   </ItemGroup>
@@ -89,10 +92,13 @@
     <MakeDir Directories="$(SolutionDir)..\staging\Couchbase.Lite.Storage.CustomSQLite\Xamarin.iOS10" />
     <Copy SourceFiles="$(OutputPath)Couchbase.Lite.Storage.CustomSQLite.dll;$(OutputPath)Couchbase.Lite.Storage.CustomSQLite.dll.mdb" DestinationFolder="$(SolutionDir)..\staging\Couchbase.Lite.Storage.CustomSQLite\Xamarin.iOS10" />
   </Target>
-  <Target Name="BeforeBuild">
+  <Target Condition=" '$(Configuration)' == 'Packaging' Or '$(Archive)' == 'true'" Name="BeforeBuild">
      <Message Text="Downloading native SQLite binaries, if needed.  This may take a while..." />
      <Exec Condition=" '$(OS)' == 'Windows_NT' " Command="powershell -executionpolicy Unrestricted $(ProjectDir)..\vendor\sqlite\download_native.ps1 " />
      <Exec Condition=" '$(OS)' != 'Windows_NT' " Command="bash $(ProjectDir)..\vendor\sqlite\download_native.sh " />
      <Message Text="Finished Downloading!" />
+  </Target>
+  <Target Condition=" '$(Configuration)' != 'Packaging' And '$(Archive)' != 'true'" Name="BeforeBuild">
+    <Error Condition=" !Exists('..\vendor\sqlite\libsqlite3.a')" Text="Custom SQLite native library not present, cannot build Custom SQLite storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0003" Code="CBL-BLD0003" />
   </Target>
 </Project>

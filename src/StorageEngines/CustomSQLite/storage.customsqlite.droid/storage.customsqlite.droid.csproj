@@ -78,19 +78,19 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedNativeLibrary Include="..\vendor\sqlite\arm64-v8a\libcbsqlite3.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\vendor\sqlite\arm64-v8a\libcbsqlite3.so')" Include="..\vendor\sqlite\arm64-v8a\libcbsqlite3.so">
       <Link>arm64-v8a\libcbsqlite3.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\vendor\sqlite\armeabi\libcbsqlite3.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\vendor\sqlite\armeabi\libcbsqlite3.so')" Include="..\vendor\sqlite\armeabi\libcbsqlite3.so">
       <Link>armeabi\libcbsqlite3.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\vendor\sqlite\armeabi-v7a\libcbsqlite3.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\vendor\sqlite\armeabi-v7a\libcbsqlite3.so')" Include="..\vendor\sqlite\armeabi-v7a\libcbsqlite3.so">
       <Link>armeabi-v7a\libcbsqlite3.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\vendor\sqlite\x86\libcbsqlite3.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\vendor\sqlite\x86\libcbsqlite3.so')" Include="..\vendor\sqlite\x86\libcbsqlite3.so">
       <Link>x86\libcbsqlite3.so</Link>
     </EmbeddedNativeLibrary>
-    <EmbeddedNativeLibrary Include="..\vendor\sqlite\x86_64\libcbsqlite3.so">
+    <EmbeddedNativeLibrary Condition="Exists('..\vendor\sqlite\x86_64\libcbsqlite3.so')" Include="..\vendor\sqlite\x86_64\libcbsqlite3.so">
       <Link>x86_64\libcbsqlite3.so</Link>
     </EmbeddedNativeLibrary>
   </ItemGroup>
@@ -113,8 +113,11 @@
     <MakeDir Directories="$(SolutionDir)..\staging\Couchbase.Lite.Storage.SQLCipher\MonoAndroid" />
     <Copy SourceFiles="$(OutputPath)Couchbase.Lite.Storage.CustomSQLite.dll;$(OutputPath)Couchbase.Lite.Storage.CustomSQLite.$(mdb)" DestinationFolder="$(SolutionDir)..\staging\Couchbase.Lite.Storage.CustomSQLite\MonoAndroid" />
   </Target>
-  <Target Name="DownloadNativeSQLite" BeforeTargets="_CreateNativeLibraryArchive">
+  <Target Condition=" '$(Configuration)' == 'Packaging' Or '$(Archive)' == 'true'" Name="DownloadNativeSQLite" BeforeTargets="_CreateNativeLibraryArchive">
      <Exec Condition=" '$(OS)' == 'Windows_NT' " Command="powershell -executionpolicy Unrestricted $(ProjectDir)..\vendor\sqlite\download_native.ps1 " />
      <Exec Condition=" '$(OS)' != 'Windows_NT' " Command=" bash $(ProjectDir)..\vendor\sqlite\download_native.sh " />
+  </Target>
+  <Target Condition=" '$(Configuration)' != 'Packaging' And '$(Archive)' != 'true'" Name="CheckNativeSQLite" BeforeTargets="_CreateNativeLibraryArchive">
+    <Error Condition=" !Exists('..\vendor\sqlite\arm64-v8a\libcbsqlite3.so') Or !Exists('..\vendor\sqlite\armeabi\libcbsqlite3.so') Or !Exists('..\vendor\sqlite\armeabi-v7a\libcbsqlite3.so') Or !Exists('..\vendor\sqlite\x86\libcbsqlite3.so') Or !Exists('..\vendor\sqlite\x86_64\libcbsqlite3.so')" Text="Custom SQLite native library not present, cannot build Custom SQLite storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0003" Code="CBL-BLD0003" />
   </Target>
 </Project>

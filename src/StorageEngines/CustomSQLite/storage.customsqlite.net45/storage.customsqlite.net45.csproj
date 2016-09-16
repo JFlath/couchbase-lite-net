@@ -1,9 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition=" '$(OS)' != 'Windows_NT' ">
+    <OSType Condition="Exists('/Library/Frameworks/')">Mac</OSType>
+    <OSType Condition="!Exists('/Library/Frameworks/')">Linux</OSType>
     <mdb>dll.mdb</mdb>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(OS)' == 'Windows_NT' ">
+    <OSType>Windows</OSType>
     <mdb>pdb</mdb>
   </PropertyGroup>
   <PropertyGroup>
@@ -69,29 +72,40 @@
     <Copy SourceFiles="$(OutputPath)x86\cbsqlite3.dll" DestinationFolder="$(SolutionDir)..\staging\Couchbase.Lite.Storage.CustomSQLite\net45\x86" />
     <Copy SourceFiles="$(OutputPath)x64\cbsqlite3.dll" DestinationFolder="$(SolutionDir)..\staging\Couchbase.Lite.Storage.CustomSQLite\net45\x64" />
   </Target>
-  <Target Name="BeforeBuild">
+  <Target Condition=" '$(Configuration)' == 'Packaging' Or '$(Archive)' == 'true'" Name="BeforeBuild">
      <Message Text="Downloading native SQLite binaries, if needed.  This may take a while..." />
      <Exec Condition=" '$(OS)' == 'Windows_NT' " Command="powershell -executionpolicy Unrestricted $(ProjectDir)..\vendor\sqlite\download_native.ps1 " />
      <Exec Condition=" '$(OS)' != 'Windows_NT' " Command="bash $(ProjectDir)..\vendor\sqlite\download_native.sh " />
      <Message Text="Finished Downloading!" />
   </Target>
+  <Target Condition=" '$(Configuration)' != 'Packaging' And '$(Archive)' != 'true'" Name="BeforeBuild">
+    <Error Condition=" '$(OSType)' == 'Linux' AND !Exists('..\vendor\sqlite\libcbsqlite3.so')" 
+                Text="Custom SQLite native library not present, cannot build Custom SQLite storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0003"
+                Code="CBL-BLD0003" />
+    <Error Condition=" '$(OSType)' == 'Mac' AND !Exists('..\vendor\sqlite\libcbsqlite3.dylib')"   
+            Text="Custom SQLite native library not present, cannot build Custom SQLite storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0003"
+            Code="CBL-BLD0003" />
+    <Error Condition=" '$(OSType)' == 'Windows' AND (!Exists('..\vendor\sqlite\x86\cbsqlite.dll') OR !Exists('..\vendor\sqlite\x64\cbsqlite.dll'))"   
+            Text="Custom SQLite native library not present, cannot build Custom SQLite storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0003"
+            Code="CBL-BLD0003" />
+  </Target>
   <ItemGroup>
-    <None Include="..\vendor\sqlite\libcbsqlite3.so">
+    <None Condition="Exists('..\vendor\sqlite\libcbsqlite3.so')" Include="..\vendor\sqlite\libcbsqlite3.so">
       <Link>libcbsqlite3.so</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="net45.targets">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\vendor\sqlite\libcbsqlite3.dylib">
+    <None Condition="Exists('..\vendor\sqlite\libcbsqlite3.dylib')" Include="..\vendor\sqlite\libcbsqlite3.dylib">
       <Link>libcbsqlite3.dylib</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\vendor\sqlite\x86\cbsqlite3.dll">
+    <None Condition="Exists('..\vendor\sqlite\x86\cbsqlite3.dll')" Include="..\vendor\sqlite\x86\cbsqlite3.dll">
       <Link>x86\cbsqlite3.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\vendor\sqlite\x64\cbsqlite3.dll">
+    <None Condition="Exists('..\vendor\sqlite\x64\cbsqlite3.dll')" Include="..\vendor\sqlite\x64\cbsqlite3.dll">
       <Link>x64\cbsqlite3.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

@@ -23,6 +23,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <ConsolePause>false</ConsolePause>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <Optimize>true</Optimize>
@@ -33,6 +34,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DefineConstants>__UNIFIED__;__MOBILE__;__IOS__;SQLITE;</DefineConstants>
     <DebugType>pdbonly</DebugType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Packaging|AnyCPU' ">
     <Optimize>true</Optimize>
@@ -41,6 +43,7 @@
     <DebugSymbols>true</DebugSymbols>
     <DefineConstants>__UNIFIED__;__MOBILE__;__IOS__;SQLITE;PLATFORM_UNIFIED</DefineConstants>
     <DebugType>pdbonly</DebugType>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />

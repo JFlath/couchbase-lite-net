@@ -68,7 +68,7 @@
     <Copy SourceFiles="$(OutputPath)Couchbase.Lite.Storage.ForestDB.dll;$(OutputPath)Couchbase.Lite.Storage.ForestDB.dll.mdb" DestinationFolder="$(SolutionDir)..\staging\Couchbase.Lite.Storage.ForestDB\Xamarin.iOS10" />
   </Target>
   <ItemGroup>
-    <ManifestResourceWithNoCulture Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.a">
+    <ManifestResourceWithNoCulture Condition="Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.a')" Include="..\CBForest\CSharp\prebuilt\libCBForest-Interop.a">
       <Link>libCBForest-Interop.a</Link>
     </ManifestResourceWithNoCulture>
     <None Include="packages.config" />
@@ -81,4 +81,7 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />
+  <Target Name="BeforeBuild">
+        <Error Condition=" !Exists('..\CBForest\CSharp\prebuilt\libCBForest-Interop.a')" Code="CBL-BLD002" Text="CBForest-Interop native library not present, cannot build ForestDB storage engine!  See https://github.com/couchbase/couchbase-lite-net/wiki/Error-Dictionary#cblbld0002" />
+  </Target>
 </Project>
