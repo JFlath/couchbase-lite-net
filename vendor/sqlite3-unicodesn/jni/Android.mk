@@ -6,11 +6,13 @@ include $(CLEAR_VARS)
 LOCAL_MODULE	:=	Tokenizer
 
 SQLITE3_PATH   	:=  $(LOCAL_PATH)/../../src/StorageEngines/ForestDB/CBForest/vendor/sqlite3-unicodesn
+SQLITE3_WIN_PATH := $(LOCAL_PATH)/../../src/StorageEngines/ForestDB/CBForest/CBForest.VS2015
 CBFOREST_PATH		:=  $(LOCAL_PATH)/../../src/StorageEngines/ForestDB/CBForest/CBForest
 
 LOCAL_CFLAGS    :=  -I$(SQLITE3_PATH)/libstemmer_c/runtime/ \
 					-I$(SQLITE3_PATH)/libstemmer_c/src_c/ \
-					-I$(SQLITE3_PATH)/ 
+					-I$(SQLITE3_PATH)/ \
+                    -I$(SQLITE3_WIN_PATH)
 
 # For sqlite3-unicodesn
 LOCAL_CFLAGS	+=	-DSQLITE_ENABLE_FTS4 \
