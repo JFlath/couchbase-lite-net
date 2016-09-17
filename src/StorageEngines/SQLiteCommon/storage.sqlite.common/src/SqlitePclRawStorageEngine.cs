@@ -104,11 +104,44 @@ namespace Couchbase.Lite.Storage.SQLCipher
         #endif
         private static unsafe extern void sqlite3Fts3UnicodeSnTokenizer(sqlite3_tokenizer_module **tokenizer);
 
+        [DllImport("kernel32")]
+        private static extern IntPtr LoadLibraryEx(string lpFileName, IntPtr hFile, uint dwFlags);
+
         private bool IsOnDBThread {
             get {
                 var scheduler = Factory.Scheduler as SingleThreadScheduler;
                 return scheduler.IsOnSpecialThread;
             }
+        }
+
+        private unsafe bool LoadWindowsNative()
+        {
+            string baseDirectory = new Uri(AppDomain.CurrentDomain.BaseDirectory).LocalPath;
+            if(baseDirectory == null) {
+                var currentAssembly = typeof(SqlitePCLRawStorageEngine).Assembly;
+                var codeBase = currentAssembly.CodeBase;
+                var uri = new UriBuilder(codeBase);
+                baseDirectory = System.IO.Path.GetDirectoryName(Uri.UnescapeDataString(uri.Path));
+
+            }
+
+            if(baseDirectory == null) {
+                return false;
+            }
+
+            var architecture = IntPtr.Size == 4
+                ? "x86"
+                : "x64";
+
+            var dllPath = System.IO.Path.Combine(System.IO.Path.Combine(baseDirectory, architecture), "Tokenizer.dll");
+            if(!File.Exists(dllPath)) {
+                return false;
+            }
+
+            const uint LOAD_WITH_ALTERED_SEARCH_PATH = 8;
+
+            var ptr = LoadLibraryEx(dllPath, IntPtr.Zero, LOAD_WITH_ALTERED_SEARCH_PATH);
+            return ptr != IntPtr.Zero;
         }
 
         private unsafe int RegisterTokenizer(sqlite3 db)
@@ -119,6 +152,12 @@ namespace Couchbase.Lite.Storage.SQLCipher
             string zSql = "SELECT fts3_tokenizer(?, ?)";
 
             try {
+                if(Environment.OSVersion.Platform == PlatformID.Win32NT) {
+                    if(!LoadWindowsNative()) {
+                        throw new DllNotFoundException("Tokenizer.dll not found");
+                    }
+                }
+
                 sqlite3Fts3UnicodeSnTokenizer(&tokenizer);
             } catch(Exception) {
                 Log.To.Query.W(TAG, "Full text functionality not available, Tokenizer native library is missing!");
@@ -130,8 +169,14 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 throw new ugly.sqlite3_exception(rc);
             }
 
-            var intptr = new IntPtr(tokenizer).ToInt32();
-            var bytes = BitConverter.GetBytes(intptr);
+            var bytes = default(byte[]);
+            if(IntPtr.Size == 8) {
+                var intptr = new IntPtr(tokenizer).ToInt64();
+                bytes = BitConverter.GetBytes(intptr);
+            } else {
+                var intptr = new IntPtr(tokenizer).ToInt32();
+                bytes = BitConverter.GetBytes(intptr);
+            }
 
             raw.sqlite3_bind_text(pStmt, 1, TokenizerName);
             raw.sqlite3_bind_blob(pStmt, 2, bytes);
