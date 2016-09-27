@@ -174,6 +174,13 @@ namespace Couchbase.Lite
         /// </summary>
         public bool AllNew { get; set; }
 
+        /// <summary>
+        /// Gets or sets whether or not to use POST requests when dealing with the
+        /// _changes endpoint on the remote endpoint.  If <c>false</c>, use GET
+        /// instead.  Default <c>true</c>.
+        /// </summary>
+        public bool UsePost { get; set; }
+
         #endregion
 
         #region Constructors
@@ -192,6 +199,7 @@ namespace Couchbase.Lite
             MaxRevsToGetInBulk = DefaultMaxRevsToGetInBulk;
             RetryStrategy = DefaultRetryStrategy.Copy();
             ReplicationRetryDelay = DefaultReplicationRetryDelay;
+            UsePost = true;
         }
 
         #endregion
