@@ -1101,7 +1101,7 @@ namespace Couchbase.Lite
             var reachabilityManager = LocalDatabase.Manager.NetworkReachabilityManager;
             reachabilityManager.StatusChanged += NetworkStatusChanged;
 
-            if (!LocalDatabase.Manager.NetworkReachabilityManager.CanReach(RemoteUrl.AbsoluteUri, ReplicationOptions.RequestTimeout)) {
+            if (!LocalDatabase.Manager.NetworkReachabilityManager.CanReach(_remoteSession, RemoteUrl.AbsoluteUri, ReplicationOptions.RequestTimeout)) {
                 Log.To.Sync.I(Tag, "Remote endpoint is not reachable, going offline...");
                 LastError = LocalDatabase.Manager.NetworkReachabilityManager.LastError;
                 FireTrigger(ReplicationTrigger.GoOffline);
@@ -1284,6 +1284,7 @@ namespace Couchbase.Lite
             if(!LocalDatabase.IsOpen || remoteSession.Disposed) {
                 // This logic has already been handled by DatabaseClosing(), or
                 // this replication never started in the first place (client still null)
+                remoteSession?.Dispose();
                 return;
             }
 
@@ -1718,7 +1719,7 @@ namespace Couchbase.Lite
                     lastSequenceChanged = true;
                     SaveLastSequence(null);
                 }         
-            });
+            }, true);
         }
 
         private void SetupRevisionBodyTransformationFunction()
@@ -1774,7 +1775,7 @@ namespace Couchbase.Lite
 
             _stateMachine.Configure(ReplicationState.Running).Permit(ReplicationTrigger.GoOffline, ReplicationState.Offline);
             _stateMachine.Configure(ReplicationState.Offline).PermitIf(ReplicationTrigger.GoOnline, ReplicationState.Running, 
-                () => LocalDatabase.Manager.NetworkReachabilityManager.CanReach(RemoteUrl.AbsoluteUri, ReplicationOptions.RequestTimeout));
+                () => LocalDatabase.Manager.NetworkReachabilityManager.CanReach(_remoteSession, RemoteUrl.AbsoluteUri, ReplicationOptions.RequestTimeout));
             
             _stateMachine.Configure(ReplicationState.Stopping).Permit(ReplicationTrigger.StopImmediate, ReplicationState.Stopped);
             _stateMachine.Configure(ReplicationState.Stopped).Permit(ReplicationTrigger.Start, ReplicationState.Running);
